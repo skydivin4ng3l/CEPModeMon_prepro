@@ -1,5 +1,5 @@
 # Ignore all
-*
+prepro/src/main/java/org/skydivin4ng3l/Main.java
 
 # Unignore all with extensions
 !*.*
