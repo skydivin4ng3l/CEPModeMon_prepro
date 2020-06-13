@@ -45,7 +45,7 @@ import picocli.CommandLine.Mixin;
 @Command(
 		name = "cepmodemon prepro",
 		mixinStandardHelpOptions = true,
-		version = "0.1.0",
+		version = "0.0.0",
 		description = "PreProcesses the cepta events coming from the Kafka Monitoring queue.")
 public class Main implements Callable<Integer> {
 
@@ -53,20 +53,20 @@ public class Main implements Callable<Integer> {
 	//topics
 	private Map<String, List<PartitionInfo> > incomingTopics;
 	// Consumers
-	private Map<String,FlinkKafkaConsumer011<EventOuterClass.Event>> flinkKafkaConsumer011s = new HashMap<>();
+	private Map<String,FlinkKafkaConsumer011<EventOuterClass.Event>> flinkKafkaConsumer011s;
 
 	/*-------------------------
 	 * Begin - Monitoring Producers
 	 * ------------------------*/
 	// Producers
-	private Map<String,FlinkKafkaProducer011<Long/*EventOuterClass.Event*/>> flinkKafkaProducer011s = new HashMap<>();
+	private Map<String,FlinkKafkaProducer011<Long/*EventOuterClass.Event*/>> flinkKafkaProducer011s;
 
 	/*-------------------------
 	 * End - Monitoring Producers
 	 * ------------------------*/
-	private void setupConsumers() {
+	private void setupConsumers() throws InterruptedException {
 		//get All Kafka Topics
-
+		this.flinkKafkaConsumer011s = new HashMap<>();
 
 		Properties props = new Properties();
 		props.put("bootstrap.servers", "localhost:9092");
@@ -74,21 +74,28 @@ public class Main implements Callable<Integer> {
 		props.put("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
 		props.put("value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
 
+
 		KafkaConsumer<String, String> topicConsumer = new KafkaConsumer<String, String>(props);
 		incomingTopics = topicConsumer.listTopics();
 		topicConsumer.close();
 
-		for (Map.Entry<String,List<PartitionInfo>> entry : incomingTopics.entrySet()) {
-			if (entry.getKey().startsWith("MONITOR_")){
+		Iterator<Map.Entry<String, List<PartitionInfo>>> iterator = incomingTopics.entrySet().iterator();
+		while(iterator.hasNext()) {
+			Map.Entry<String, List<PartitionInfo>> entry = iterator.next();
+			String topic = entry.getKey();
+			if (topic.startsWith("MONITOR_")) {
 				FlinkKafkaConsumer011<EventOuterClass.Event> consumer =
-						new FlinkKafkaConsumer011<Event>(entry.getKey(),
+						new FlinkKafkaConsumer011<Event>(topic,
 								new GenericBinaryProtoDeserializer<Event>(Event.class),
-								new KafkaConfig().withClientId(entry.getKey()+"MainConsumer").withGroupID("Monitoring").getProperties());
-				this.flinkKafkaConsumer011s.put(entry.getKey(),consumer);
+								new KafkaConfig().withClientId(topic + "MainConsumer").withGroupID("Monitoring").getProperties());
+				this.flinkKafkaConsumer011s.put(topic, consumer);
 			} else {
-				incomingTopics.entrySet().remove(entry);
+				iterator.remove();
 			}
 		}
+
+
+
 
 //		this.liveTrainDataConsumer =
 //				new FlinkKafkaConsumer011<>(
@@ -115,6 +122,7 @@ public class Main implements Callable<Integer> {
 	}
 
 	private void setupProducers() {
+		this.flinkKafkaProducer011s = new HashMap<>();
 
 		for (Map.Entry<String,List<PartitionInfo>> entry : incomingTopics.entrySet()) {
 			String newOutgoingTopic = entry.getKey().replaceFirst("_","_AGGREGATED_");
@@ -141,32 +149,52 @@ public class Main implements Callable<Integer> {
 	public Integer call() throws Exception {
 		logger.info("Starting cepModeMon prepro...");
 
-		// Setup the streaming execution environment
-		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-		env.setParallelism(1);
-		env.setStreamTimeCharacteristic(TimeCharacteristic.IngestionTime);
-		this.setupConsumers();
-		this.setupProducers();
+		Integer currentTry = 0;
+		Integer maxTries = 20;
+		Long timeBetweenTries = 1000l;
+		while (true) {
+
+			// Setup the streaming execution environment
+			final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+			env.setParallelism(1);
+			env.setStreamTimeCharacteristic(TimeCharacteristic.IngestionTime);
+			this.setupConsumers();
+			this.setupProducers();
 
 
-		for (Map.Entry<String,List<PartitionInfo>> entry : incomingTopics.entrySet()) {
-			String currentTopic = entry.getKey();
-			FlinkKafkaConsumer011<Event> currentConsumer = flinkKafkaConsumer011s.get(currentTopic);
-			FlinkKafkaProducer011<Long> currentProducer = flinkKafkaProducer011s.get(currentTopic);
-			DataStream<Event> someEntryStream = env.addSource(currentConsumer);
-			someEntryStream.print();
-			DataStream<Long> aggregatedStream = someEntryStream.windowAll(TumblingEventTimeWindows.of(Time.seconds(5))).aggregate(new BasicCounter<Event>());
-			aggregatedStream.print();
-			aggregatedStream.addSink(currentProducer);
-//			DataStream<PlannedTrainDataOuterClass.PlannedTrainData> plannedTrainDataStream = someEntryStream.map(new MapFunction<Event, PlannedTrainDataOuterClass.PlannedTrainData>(){
-//				@Override
-//				public PlannedTrainDataOuterClass.PlannedTrainData map(Event event) throws Exception{
-//					return event.getPlannedTrain();
-//				}
-//			});
+			for (Map.Entry<String,List<PartitionInfo>> entry : incomingTopics.entrySet()) {
+				String currentTopic = entry.getKey();
+				FlinkKafkaConsumer011<Event> currentConsumer = flinkKafkaConsumer011s.get(currentTopic);
+				FlinkKafkaProducer011<Long> currentProducer = flinkKafkaProducer011s.get(currentTopic);
+				DataStream<Event> someEntryStream = env.addSource(currentConsumer);
+				someEntryStream.print();
+				DataStream<Long> aggregatedStream = someEntryStream.windowAll(TumblingEventTimeWindows.of(Time.seconds(5))).aggregate(new BasicCounter<Event>());
+				aggregatedStream.print();
+				aggregatedStream.addSink(currentProducer);
+	//			DataStream<PlannedTrainDataOuterClass.PlannedTrainData> plannedTrainDataStream = someEntryStream.map(new MapFunction<Event, PlannedTrainDataOuterClass.PlannedTrainData>(){
+	//				@Override
+	//				public PlannedTrainDataOuterClass.PlannedTrainData map(Event event) throws Exception{
+	//					return event.getPlannedTrain();
+	//				}
+	//			});
+			}
+
+			try {
+				env.execute("CEPMODEMON PREPRO");
+				break;
+			} catch (IllegalStateException e) {
+				e.printStackTrace();
+				if (maxTries<=currentTry) {
+					break;
+				} else {
+					currentTry++;
+					Thread.sleep(timeBetweenTries);
+					timeBetweenTries *= 2;
+					logger.info("Restarting cepModeMon prepro...for the "+currentTry+". Time");
+				}
+			}
 		}
 
-		env.execute("CEPMODEMON PREPRO");
 		return 0;
 	}
 
