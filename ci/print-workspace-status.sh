@@ -8,7 +8,7 @@ set -o pipefail
 export CEPMODEMON_ROOT=$(dirname "${BASH_SOURCE}")/..
 
 source "${CEPMODEMON_ROOT}/ci/versioning/query-git.sh"
-cepta::version::get_version_vars
+cepmodemon::version::get_version_vars
 
 # Most important ones
 export STABLE_BUILD_GIT_COMMIT=${CEPMODEMON_GIT_COMMIT-}
