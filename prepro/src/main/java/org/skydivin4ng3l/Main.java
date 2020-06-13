@@ -21,34 +21,26 @@ package org.skydivin4ng3l.cepmodemon;
 import java.util.*;
 import java.util.concurrent.Callable;
 
-import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.windowing.assigners.TumblingEventTimeWindows;
 import org.apache.flink.streaming.api.windowing.time.Time;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.common.PartitionInfo;
 import org.bptlab.cepta.models.events.event.EventOuterClass;
-import org.bptlab.cepta.models.events.info.LocationDataOuterClass;
-import org.bptlab.cepta.models.events.train.LiveTrainDataOuterClass;
-import org.bptlab.cepta.models.events.train.PlannedTrainDataOuterClass;
 import org.bptlab.cepta.models.events.event.EventOuterClass.Event;
 import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.connectors.kafka.FlinkKafkaConsumer011;
 import org.apache.flink.streaming.connectors.kafka.FlinkKafkaProducer011;
-import org.apache.kafka.common.serialization.LongSerializer;
 import org.skydivin4ng3l.cepmodemon.config.KafkaConfig;
 import org.skydivin4ng3l.cepmodemon.operators.BasicCounter;
 import org.skydivin4ng3l.cepmodemon.serialization.GenericBinaryProtoDeserializer;
-import org.skydivin4ng3l.cepmodemon.serialization.GenericBinaryProtoSerializer;
+import org.skydivin4ng3l.cepmodemon.serialization.SimpleLongSerializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Mixin;
-
-import java.util.concurrent.Callable;
-import java.util.concurrent.TimeUnit;
 
 @Command(
 		name = "cepmodemon prepro",
@@ -58,22 +50,23 @@ import java.util.concurrent.TimeUnit;
 public class Main implements Callable<Integer> {
 
 	private static final Logger logger = LoggerFactory.getLogger(Main.class.getName());
-
+	//topics
+	private Map<String, List<PartitionInfo> > incomingTopics;
 	// Consumers
-	private ArrayList<FlinkKafkaConsumer011<EventOuterClass.Event>> flinkKafkaConsumer011s = new ArrayList<>();
+	private Map<String,FlinkKafkaConsumer011<EventOuterClass.Event>> flinkKafkaConsumer011s = new HashMap<>();
 
 	/*-------------------------
 	 * Begin - Monitoring Producers
 	 * ------------------------*/
 	// Producers
-	private ArrayList<FlinkKafkaProducer011<EventOuterClass.Event>> flinkKafkaProducer011s = new ArrayList<>();
+	private Map<String,FlinkKafkaProducer011<Long/*EventOuterClass.Event*/>> flinkKafkaProducer011s = new HashMap<>();
 
 	/*-------------------------
 	 * End - Monitoring Producers
 	 * ------------------------*/
 	private void setupConsumers() {
 		//get All Kafka Topics
-		Map<String, List<PartitionInfo> > topics;
+
 
 		Properties props = new Properties();
 		props.put("bootstrap.servers", "localhost:9092");
@@ -82,16 +75,18 @@ public class Main implements Callable<Integer> {
 		props.put("value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
 
 		KafkaConsumer<String, String> topicConsumer = new KafkaConsumer<String, String>(props);
-		topics = topicConsumer.listTopics();
+		incomingTopics = topicConsumer.listTopics();
 		topicConsumer.close();
 
-		for (Map.Entry<String,List<PartitionInfo>> entry : topics.entrySet()) {
+		for (Map.Entry<String,List<PartitionInfo>> entry : incomingTopics.entrySet()) {
 			if (entry.getKey().startsWith("MONITOR_")){
 				FlinkKafkaConsumer011<EventOuterClass.Event> consumer =
 						new FlinkKafkaConsumer011<Event>(entry.getKey(),
 								new GenericBinaryProtoDeserializer<Event>(Event.class),
 								new KafkaConfig().withClientId(entry.getKey()+"MainConsumer").withGroupID("Monitoring").getProperties());
-				this.flinkKafkaConsumer011s.add(consumer);
+				this.flinkKafkaConsumer011s.put(entry.getKey(),consumer);
+			} else {
+				incomingTopics.entrySet().remove(entry);
 			}
 		}
 
@@ -121,7 +116,14 @@ public class Main implements Callable<Integer> {
 
 	private void setupProducers() {
 
-
+		for (Map.Entry<String,List<PartitionInfo>> entry : incomingTopics.entrySet()) {
+			String newOutgoingTopic = entry.getKey().replaceFirst("_","_AGGREGATED_");
+			FlinkKafkaProducer011<Long> producer =
+					new FlinkKafkaProducer011<Long>(newOutgoingTopic,
+							new SimpleLongSerializer(newOutgoingTopic),
+							new KafkaConfig().withClientId(newOutgoingTopic+"Producer").withGroupID("Monitoring").getProperties());
+			this.flinkKafkaProducer011s.put(entry.getKey(),producer);
+		}
 //		KafkaConfig delaySenderConfig = new KafkaConfig().withClientId("TrainDelayNotificationProducer")
 //				.withKeySerializer(Optional.of(LongSerializer::new));
 //		this.trainDelayNotificationProducer = new FlinkKafkaProducer011<>(
@@ -147,11 +149,15 @@ public class Main implements Callable<Integer> {
 		this.setupProducers();
 
 
-		for ( FlinkKafkaConsumer011<Event> consumer : this.flinkKafkaConsumer011s) {
-			DataStream<Event> someEntryStream = env.addSource(consumer);
+		for (Map.Entry<String,List<PartitionInfo>> entry : incomingTopics.entrySet()) {
+			String currentTopic = entry.getKey();
+			FlinkKafkaConsumer011<Event> currentConsumer = flinkKafkaConsumer011s.get(currentTopic);
+			FlinkKafkaProducer011<Long> currentProducer = flinkKafkaProducer011s.get(currentTopic);
+			DataStream<Event> someEntryStream = env.addSource(currentConsumer);
 			someEntryStream.print();
 			DataStream<Long> aggregatedStream = someEntryStream.windowAll(TumblingEventTimeWindows.of(Time.seconds(5))).aggregate(new BasicCounter<Event>());
 			aggregatedStream.print();
+			aggregatedStream.addSink(currentProducer);
 //			DataStream<PlannedTrainDataOuterClass.PlannedTrainData> plannedTrainDataStream = someEntryStream.map(new MapFunction<Event, PlannedTrainDataOuterClass.PlannedTrainData>(){
 //				@Override
 //				public PlannedTrainDataOuterClass.PlannedTrainData map(Event event) throws Exception{

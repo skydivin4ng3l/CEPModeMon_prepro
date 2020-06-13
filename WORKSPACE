@@ -176,6 +176,7 @@ maven_install(
         "org.testcontainers:postgresql:1.14.1",
         "commons-io:commons-io:2.6",
         "com.google.code.findbugs:jsr305:1.3.9",
+        "com.google.guava:guava:28.0-jre",
         "com.google.errorprone:error_prone_annotations:2.0.18",
         "com.google.j2objc:j2objc-annotations:1.1",
         "com.google.protobuf:protobuf-java:3.11.1",
@@ -284,4 +285,3 @@ http_archive(
 load("@bazel_gazelle//:deps.bzl", "gazelle_dependencies", "go_repository")
 
 gazelle_dependencies()
-
