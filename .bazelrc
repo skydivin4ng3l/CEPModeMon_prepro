@@ -4,4 +4,4 @@ test --test_strategy=standalone --test_output=streamed --cache_test_results=no
 run --incompatible_strict_action_env
 
 # Include git version info
-# build --stamp --workspace_status_command ci/print-workspace-status.sh
+build --stamp --workspace_status_command ci/print-workspace-status.sh
