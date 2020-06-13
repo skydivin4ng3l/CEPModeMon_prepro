@@ -61,15 +61,15 @@ multirun(
     visibility = ["//visibility:public"],
 )
 
-#container_push(
-#    name = "publish",
-#    format = "Docker",
-#    image = ":image",
-#    registry = "index.docker.io",
-#    repository = "cepmodemon/prepro",
-#    tag = "{STABLE_DOCKER_TAG}",
-#    visibility = ["//visibility:public"],
-#)
+container_push(
+    name = "publish",
+    format = "Docker",
+    image = ":image",
+    registry = "index.docker.io",
+    repository = "cepmodemon/prepro",
+    tag = "{STABLE_DOCKER_TAG}",
+    visibility = ["//visibility:public"],
+)
 
 sub_tests = [
 ]
