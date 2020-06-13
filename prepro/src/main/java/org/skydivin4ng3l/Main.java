@@ -68,8 +68,9 @@ public class Main implements Callable<Integer> {
 		//get All Kafka Topics
 		this.flinkKafkaConsumer011s = new HashMap<>();
 
+
 		Properties props = new Properties();
-		props.put("bootstrap.servers", "localhost:9092");
+		props.put("bootstrap.servers", new KafkaConfig().getBroker()/*"localhost:9092"*/);
 		props.put("group.id", "test-consumer-group");
 		props.put("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
 		props.put("value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
