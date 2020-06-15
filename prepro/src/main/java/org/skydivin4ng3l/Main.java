@@ -33,6 +33,7 @@ import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.connectors.kafka.FlinkKafkaConsumer011;
 import org.apache.flink.streaming.connectors.kafka.FlinkKafkaProducer011;
+import org.bptlab.cepta.models.monitoring.monitor.MonitorOuterClass.Monitor;
 import org.skydivin4ng3l.cepmodemon.config.KafkaConfig;
 import org.skydivin4ng3l.cepmodemon.models.events.aggregate.AggregateOuterClass;
 import org.skydivin4ng3l.cepmodemon.operators.BasicCounter;
@@ -56,7 +57,7 @@ public class Main implements Callable<Integer> {
 	//topics
 	private Map<String, List<PartitionInfo> > incomingTopics;
 	// Consumers
-	private Map<String,FlinkKafkaConsumer011<EventOuterClass.Event>> flinkKafkaConsumer011s;
+	private Map<String,FlinkKafkaConsumer011<Monitor>> flinkKafkaConsumer011s;
 
 	/*-------------------------
 	 * Begin - Monitoring Producers
@@ -88,9 +89,9 @@ public class Main implements Callable<Integer> {
 			Map.Entry<String, List<PartitionInfo>> entry = iterator.next();
 			String topic = entry.getKey();
 			if (topic.startsWith("MONITOR_")) {
-				FlinkKafkaConsumer011<EventOuterClass.Event> consumer =
-						new FlinkKafkaConsumer011<Event>(topic,
-								new GenericBinaryProtoDeserializer<Event>(Event.class),
+				FlinkKafkaConsumer011<Monitor> consumer =
+						new FlinkKafkaConsumer011<Monitor>(topic,
+								new GenericBinaryProtoDeserializer<Monitor>(Monitor.class),
 								new KafkaConfig().withClientId(topic + "MainConsumer").withGroupID("Monitoring").getProperties());
 				this.flinkKafkaConsumer011s.put(topic, consumer);
 			} else {
@@ -168,11 +169,11 @@ public class Main implements Callable<Integer> {
 
 			for (Map.Entry<String,List<PartitionInfo>> entry : incomingTopics.entrySet()) {
 				String currentTopic = entry.getKey();
-				FlinkKafkaConsumer011<Event> currentConsumer = flinkKafkaConsumer011s.get(currentTopic);
+				FlinkKafkaConsumer011<Monitor> currentConsumer = flinkKafkaConsumer011s.get(currentTopic);
 				FlinkKafkaProducer011<AggregateOuterClass.Aggregate> currentProducer = flinkKafkaProducer011s.get(currentTopic);
-				DataStream<Event> someEntryStream = env.addSource(currentConsumer);
+				DataStream<Monitor> someEntryStream = env.addSource(currentConsumer);
 				someEntryStream.print();
-				DataStream<AggregateOuterClass.Aggregate> aggregatedStream = someEntryStream.windowAll(TumblingEventTimeWindows.of(Time.seconds(5))).aggregate(new BasicCounter<Event>());
+				DataStream<AggregateOuterClass.Aggregate> aggregatedStream = someEntryStream.windowAll(TumblingEventTimeWindows.of(Time.seconds(5))).aggregate(new BasicCounter<Monitor>());
 				aggregatedStream.print();
 				aggregatedStream.addSink(currentProducer);
 	//			DataStream<PlannedTrainDataOuterClass.PlannedTrainData> plannedTrainDataStream = someEntryStream.map(new MapFunction<Event, PlannedTrainDataOuterClass.PlannedTrainData>(){

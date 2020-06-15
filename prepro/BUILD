@@ -8,6 +8,7 @@ MAIN_DEPS = [
     "@com_github_bptlab_cepta//models/events:location_data_java_proto",
     "@com_github_bptlab_cepta//models/events:planned_train_data_java_proto",
     "@com_github_bptlab_cepta//models/events:event_java_proto",
+    "@com_github_bptlab_cepta//models/monitoring:monitor_java_proto",
     "//models/events:aggregate_java_proto",
     "@maven//:com_google_protobuf_protobuf_java",
     "@maven//:info_picocli_picocli",

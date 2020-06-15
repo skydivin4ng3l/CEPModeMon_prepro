@@ -97,7 +97,7 @@ git_repository(
 git_repository(
     name = "com_github_bptlab_cepta",
     # branch = "dev",
-    commit = "5c5a95c234e04f59cf9726911385e5deb99d35c3",
+    commit = "95cc3bd5aabc64198ecdcafa6d60d0488a5cdd9f",
     remote = "https://github.com/bptlab/cepta.git",
     # shallow_since = "1578869856 +1100",
 )
