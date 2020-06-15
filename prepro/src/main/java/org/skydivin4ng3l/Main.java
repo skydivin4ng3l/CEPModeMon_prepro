@@ -21,6 +21,7 @@ package org.skydivin4ng3l.cepmodemon;
 import java.util.*;
 import java.util.concurrent.Callable;
 
+import org.apache.flink.api.common.typeutils.base.LongSerializer;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.windowing.assigners.TumblingEventTimeWindows;
 import org.apache.flink.streaming.api.windowing.time.Time;
@@ -33,8 +34,10 @@ import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.connectors.kafka.FlinkKafkaConsumer011;
 import org.apache.flink.streaming.connectors.kafka.FlinkKafkaProducer011;
 import org.skydivin4ng3l.cepmodemon.config.KafkaConfig;
+import org.skydivin4ng3l.cepmodemon.models.events.aggregate.AggregateOuterClass;
 import org.skydivin4ng3l.cepmodemon.operators.BasicCounter;
 import org.skydivin4ng3l.cepmodemon.serialization.GenericBinaryProtoDeserializer;
+import org.skydivin4ng3l.cepmodemon.serialization.GenericBinaryProtoSerializer;
 import org.skydivin4ng3l.cepmodemon.serialization.SimpleLongSerializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -59,7 +62,7 @@ public class Main implements Callable<Integer> {
 	 * Begin - Monitoring Producers
 	 * ------------------------*/
 	// Producers
-	private Map<String,FlinkKafkaProducer011<Long/*EventOuterClass.Event*/>> flinkKafkaProducer011s;
+	private Map<String,FlinkKafkaProducer011<AggregateOuterClass.Aggregate>> flinkKafkaProducer011s;
 
 	/*-------------------------
 	 * End - Monitoring Producers
@@ -127,9 +130,9 @@ public class Main implements Callable<Integer> {
 
 		for (Map.Entry<String,List<PartitionInfo>> entry : incomingTopics.entrySet()) {
 			String newOutgoingTopic = entry.getKey().replaceFirst("_","_AGGREGATED_");
-			FlinkKafkaProducer011<Long> producer =
-					new FlinkKafkaProducer011<Long>(newOutgoingTopic,
-							new SimpleLongSerializer(newOutgoingTopic),
+			FlinkKafkaProducer011<AggregateOuterClass.Aggregate> producer =
+					new FlinkKafkaProducer011<>(newOutgoingTopic,
+							new GenericBinaryProtoSerializer<>() /*SimpleLongSerializer(newOutgoingTopic)*/,
 							new KafkaConfig().withClientId(newOutgoingTopic+"Producer").withGroupID("Monitoring").getProperties());
 			this.flinkKafkaProducer011s.put(entry.getKey(),producer);
 		}
@@ -166,10 +169,10 @@ public class Main implements Callable<Integer> {
 			for (Map.Entry<String,List<PartitionInfo>> entry : incomingTopics.entrySet()) {
 				String currentTopic = entry.getKey();
 				FlinkKafkaConsumer011<Event> currentConsumer = flinkKafkaConsumer011s.get(currentTopic);
-				FlinkKafkaProducer011<Long> currentProducer = flinkKafkaProducer011s.get(currentTopic);
+				FlinkKafkaProducer011<AggregateOuterClass.Aggregate> currentProducer = flinkKafkaProducer011s.get(currentTopic);
 				DataStream<Event> someEntryStream = env.addSource(currentConsumer);
 				someEntryStream.print();
-				DataStream<Long> aggregatedStream = someEntryStream.windowAll(TumblingEventTimeWindows.of(Time.seconds(5))).aggregate(new BasicCounter<Event>());
+				DataStream<AggregateOuterClass.Aggregate> aggregatedStream = someEntryStream.windowAll(TumblingEventTimeWindows.of(Time.seconds(5))).aggregate(new BasicCounter<Event>());
 				aggregatedStream.print();
 				aggregatedStream.addSink(currentProducer);
 	//			DataStream<PlannedTrainDataOuterClass.PlannedTrainData> plannedTrainDataStream = someEntryStream.map(new MapFunction<Event, PlannedTrainDataOuterClass.PlannedTrainData>(){

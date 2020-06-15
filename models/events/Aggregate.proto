@@ -1,0 +1,7 @@
+syntax = "proto3";
+package models.events;
+option java_package = "org.skydivin4ng3l.cepmodemon.models.events.aggregate";
+
+message Aggregate {
+    int64 volume = 1;
+}

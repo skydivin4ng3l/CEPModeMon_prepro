@@ -2,8 +2,9 @@ package org.skydivin4ng3l.cepmodemon.operators;
 
 import com.google.protobuf.Message;
 import org.apache.flink.api.common.functions.AggregateFunction;
+import org.skydivin4ng3l.cepmodemon.models.events.aggregate.AggregateOuterClass;
 
-public class BasicCounter<T extends Message> implements AggregateFunction<T, Long, Long> {
+public class BasicCounter<T extends Message> implements AggregateFunction<T, Long, AggregateOuterClass.Aggregate> {
     @Override
     public Long createAccumulator() {
         return 0L;
@@ -15,8 +16,8 @@ public class BasicCounter<T extends Message> implements AggregateFunction<T, Lon
     }
 
     @Override
-    public Long getResult(Long aLong) {
-        return aLong;
+    public AggregateOuterClass.Aggregate getResult(Long aLong) {
+        return AggregateOuterClass.Aggregate.newBuilder().setVolume(aLong).build();
     }
 
     @Override

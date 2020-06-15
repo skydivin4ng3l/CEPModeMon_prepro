@@ -7,6 +7,7 @@ java_library(
     deps = [
         "//prepro/src/main/java/org/skydivin4ng3l/config:java_default_library",
         "@com_github_bptlab_cepta//models/events:event_java_proto",
+        "//models/events:aggregate_java_proto",
         "@com_github_bptlab_cepta//models/events:live_train_data_java_proto",
         "@com_github_bptlab_cepta//models/events:location_data_java_proto",
         "@com_github_bptlab_cepta//models/events:planned_train_data_java_proto",
