@@ -48,7 +48,7 @@ import picocli.CommandLine.Mixin;
 @Command(
 		name = "cepmodemon prepro",
 		mixinStandardHelpOptions = true,
-		version = "0.1.3",
+		version = "0.1.4",
 		description = "PreProcesses the cepta events coming from the Kafka Monitoring queue.")
 public class Main implements Callable<Integer> {
 
