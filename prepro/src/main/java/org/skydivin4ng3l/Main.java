@@ -21,20 +21,11 @@ package org.skydivin4ng3l.cepmodemon;
 import java.util.*;
 import java.util.concurrent.Callable;
 
-import org.apache.flink.api.common.typeutils.base.LongSerializer;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.streaming.api.windowing.assigners.GlobalWindows;
-import org.apache.flink.streaming.api.windowing.assigners.TumblingEventTimeWindows;
 import org.apache.flink.streaming.api.windowing.assigners.TumblingProcessingTimeWindows;
 import org.apache.flink.streaming.api.windowing.time.Time;
-import org.apache.flink.streaming.api.windowing.triggers.ContinuousProcessingTimeTrigger;
-import org.apache.flink.streaming.api.windowing.triggers.ProcessingTimeTrigger;
-import org.apache.flink.streaming.api.windowing.triggers.PurgingTrigger;
-import org.apache.flink.streaming.api.windowing.windows.GlobalWindow;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.common.PartitionInfo;
-import org.bptlab.cepta.models.events.event.EventOuterClass;
-import org.bptlab.cepta.models.events.event.EventOuterClass.Event;
 import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.connectors.kafka.FlinkKafkaConsumer011;
@@ -44,10 +35,8 @@ import org.skydivin4ng3l.cepmodemon.config.KafkaConfig;
 import org.skydivin4ng3l.cepmodemon.models.events.aggregate.AggregateOuterClass;
 import org.skydivin4ng3l.cepmodemon.operators.BasicCounter;
 import org.skydivin4ng3l.cepmodemon.operators.EmptyEventSource;
-import org.skydivin4ng3l.cepmodemon.operators.MyContinuousProcessingTimeTrigger;
 import org.skydivin4ng3l.cepmodemon.serialization.GenericBinaryProtoDeserializer;
 import org.skydivin4ng3l.cepmodemon.serialization.GenericBinaryProtoSerializer;
-import org.skydivin4ng3l.cepmodemon.serialization.SimpleLongSerializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import picocli.CommandLine;
@@ -57,7 +46,7 @@ import picocli.CommandLine.Mixin;
 @Command(
 		name = "cepmodemon prepro",
 		mixinStandardHelpOptions = true,
-		version = "0.1.6",
+		version = "0.1.7",
 		description = "PreProcesses the cepta events coming from the Kafka Monitoring queue.")
 public class Main implements Callable<Integer> {
 
@@ -107,32 +96,6 @@ public class Main implements Callable<Integer> {
 				iterator.remove();
 			}
 		}
-
-
-
-
-//		this.liveTrainDataConsumer =
-//				new FlinkKafkaConsumer011<>(
-//						Topic.LIVE_TRAIN_DATA.getValueDescriptor().getName(),
-//						new GenericBinaryProtoDeserializer<EventOuterClass.Event>(EventOuterClass.Event.class),
-//						new KafkaConfig().withClientId("LiveTrainDataMainConsumer").getProperties());
-//		this.plannedTrainDataConsumer =
-//				new FlinkKafkaConsumer011<>(
-//						Topic.PLANNED_TRAIN_DATA.getValueDescriptor().getName(),
-//						new GenericBinaryProtoDeserializer<EventOuterClass.Event>(EventOuterClass.Event.class),
-//						new KafkaConfig().withClientId("PlannedTrainDataMainConsumer").getProperties());
-//
-//		this.weatherDataConsumer =
-//				new FlinkKafkaConsumer011<>(
-//						Topic.WEATHER_DATA.getValueDescriptor().getName(),
-//						new GenericBinaryProtoDeserializer<EventOuterClass.Event>(EventOuterClass.Event.class),
-//						new KafkaConfig().withClientId("WeatherDataMainConsumer").withGroupID("Group").getProperties());
-//
-//		this.locationDataConsumer =
-//				new FlinkKafkaConsumer011<>(
-//						Topic.LOCATION_DATA.getValueDescriptor().getName(),
-//						new GenericBinaryProtoDeserializer<EventOuterClass.Event>(EventOuterClass.Event.class),
-//						new KafkaConfig().withClientId("LocationDataMainConsumer").getProperties());
 	}
 
 	private void setupProducers() {
@@ -142,17 +105,10 @@ public class Main implements Callable<Integer> {
 			String newOutgoingTopic = entry.getKey().replaceFirst("_","_AGGREGATED_");
 			FlinkKafkaProducer011<AggregateOuterClass.Aggregate> producer =
 					new FlinkKafkaProducer011<>(newOutgoingTopic,
-							new GenericBinaryProtoSerializer<>() /*SimpleLongSerializer(newOutgoingTopic)*/,
+							new GenericBinaryProtoSerializer<>(),
 							new KafkaConfig().withClientId(newOutgoingTopic+"Producer").withGroupID("Monitoring").getProperties());
 			this.flinkKafkaProducer011s.put(entry.getKey(),producer);
 		}
-//		KafkaConfig delaySenderConfig = new KafkaConfig().withClientId("TrainDelayNotificationProducer")
-//				.withKeySerializer(Optional.of(LongSerializer::new));
-//		this.trainDelayNotificationProducer = new FlinkKafkaProducer011<>(
-//				Topic.DELAY_NOTIFICATIONS.getValueDescriptor().getName(),
-//				new GenericBinaryProtoSerializer<>(),
-//				delaySenderConfig.getProperties());
-//		this.trainDelayNotificationProducer.setWriteTimestampToKafka(true);
 	}
 
 	@Mixin
@@ -184,16 +140,12 @@ public class Main implements Callable<Integer> {
 				DataStream<MonitorOuterClass.Monitor> someEntryStream = env.addSource(currentConsumer);
 				someEntryStream.print();
 				DataStream<MonitorOuterClass.Monitor> triggerStream = env.addSource(new EmptyEventSource(delayPerRecordMillis));
-				triggerStream.print();
-				DataStream<AggregateOuterClass.Aggregate> aggregatedStream = someEntryStream.union(triggerStream).windowAll(TumblingProcessingTimeWindows.of(Time.seconds(5))/*GlobalWindows.create()*/ /*TumblingEventTimeWindows.of(Time.seconds(5))*/)/*.trigger(PurgingTrigger.of(MyContinuousProcessingTimeTrigger.of(Time.seconds(5))))*/.aggregate(new BasicCounter<MonitorOuterClass.Monitor>());
+				DataStream<AggregateOuterClass.Aggregate> aggregatedStream = someEntryStream
+						.union(triggerStream)
+						.windowAll(TumblingProcessingTimeWindows.of(Time.seconds(5)))
+						.aggregate(new BasicCounter<MonitorOuterClass.Monitor>());
 				aggregatedStream.print();
 				aggregatedStream.addSink(currentProducer);
-	//			DataStream<PlannedTrainDataOuterClass.PlannedTrainData> plannedTrainDataStream = someEntryStream.map(new MapFunction<Event, PlannedTrainDataOuterClass.PlannedTrainData>(){
-	//				@Override
-	//				public PlannedTrainDataOuterClass.PlannedTrainData map(Event event) throws Exception{
-	//					return event.getPlannedTrain();
-	//				}
-	//			});
 			}
 
 			try {
