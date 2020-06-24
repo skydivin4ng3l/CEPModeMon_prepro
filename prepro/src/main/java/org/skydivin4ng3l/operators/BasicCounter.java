@@ -2,6 +2,7 @@ package org.skydivin4ng3l.cepmodemon.operators;
 
 import com.google.protobuf.Message;
 import org.apache.flink.api.common.functions.AggregateFunction;
+import org.bptlab.cepta.models.monitoring.monitor.MonitorOuterClass;
 import org.skydivin4ng3l.cepmodemon.models.events.aggregate.AggregateOuterClass;
 
 public class BasicCounter<T extends Message> implements AggregateFunction<T, Long, AggregateOuterClass.Aggregate> {
@@ -12,12 +13,17 @@ public class BasicCounter<T extends Message> implements AggregateFunction<T, Lon
 
     @Override
     public Long add(T event, Long accumulator) {
+        if(((MonitorOuterClass.Monitor)event).equals(MonitorOuterClass.Monitor.newBuilder().build())) {
+            return accumulator;
+        }
+
         return accumulator + 1L;
     }
 
     @Override
     public AggregateOuterClass.Aggregate getResult(Long accumulator) {
-        return AggregateOuterClass.Aggregate.newBuilder().setVolume(accumulator).build();
+        AggregateOuterClass.Aggregate newAggregate = AggregateOuterClass.Aggregate.newBuilder().setVolume(accumulator).build();
+        return newAggregate;
     }
 
     @Override

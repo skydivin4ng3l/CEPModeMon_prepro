@@ -23,8 +23,14 @@ import java.util.concurrent.Callable;
 
 import org.apache.flink.api.common.typeutils.base.LongSerializer;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.windowing.assigners.GlobalWindows;
 import org.apache.flink.streaming.api.windowing.assigners.TumblingEventTimeWindows;
+import org.apache.flink.streaming.api.windowing.assigners.TumblingProcessingTimeWindows;
 import org.apache.flink.streaming.api.windowing.time.Time;
+import org.apache.flink.streaming.api.windowing.triggers.ContinuousProcessingTimeTrigger;
+import org.apache.flink.streaming.api.windowing.triggers.ProcessingTimeTrigger;
+import org.apache.flink.streaming.api.windowing.triggers.PurgingTrigger;
+import org.apache.flink.streaming.api.windowing.windows.GlobalWindow;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.common.PartitionInfo;
 import org.bptlab.cepta.models.events.event.EventOuterClass;
@@ -37,6 +43,8 @@ import org.bptlab.cepta.models.monitoring.monitor.MonitorOuterClass;
 import org.skydivin4ng3l.cepmodemon.config.KafkaConfig;
 import org.skydivin4ng3l.cepmodemon.models.events.aggregate.AggregateOuterClass;
 import org.skydivin4ng3l.cepmodemon.operators.BasicCounter;
+import org.skydivin4ng3l.cepmodemon.operators.EmptyEventSource;
+import org.skydivin4ng3l.cepmodemon.operators.MyContinuousProcessingTimeTrigger;
 import org.skydivin4ng3l.cepmodemon.serialization.GenericBinaryProtoDeserializer;
 import org.skydivin4ng3l.cepmodemon.serialization.GenericBinaryProtoSerializer;
 import org.skydivin4ng3l.cepmodemon.serialization.SimpleLongSerializer;
@@ -158,12 +166,13 @@ public class Main implements Callable<Integer> {
 		Integer currentTry = 0;
 		Integer maxTries = 20;
 		Long timeBetweenTries = 1000l;
+		long delayPerRecordMillis = 5l * 1000l;
 		while (true) {
 
 			// Setup the streaming execution environment
 			final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 			env.setParallelism(1);
-			env.setStreamTimeCharacteristic(TimeCharacteristic.IngestionTime);
+			env.setStreamTimeCharacteristic(TimeCharacteristic.ProcessingTime);
 			this.setupConsumers();
 			this.setupProducers();
 
@@ -174,7 +183,9 @@ public class Main implements Callable<Integer> {
 				FlinkKafkaProducer011<AggregateOuterClass.Aggregate> currentProducer = flinkKafkaProducer011s.get(currentTopic);
 				DataStream<MonitorOuterClass.Monitor> someEntryStream = env.addSource(currentConsumer);
 				someEntryStream.print();
-				DataStream<AggregateOuterClass.Aggregate> aggregatedStream = someEntryStream.windowAll(TumblingEventTimeWindows.of(Time.seconds(5))).aggregate(new BasicCounter<MonitorOuterClass.Monitor>());
+				DataStream<MonitorOuterClass.Monitor> triggerStream = env.addSource(new EmptyEventSource(delayPerRecordMillis));
+				triggerStream.print();
+				DataStream<AggregateOuterClass.Aggregate> aggregatedStream = someEntryStream.union(triggerStream).windowAll(TumblingProcessingTimeWindows.of(Time.seconds(5))/*GlobalWindows.create()*/ /*TumblingEventTimeWindows.of(Time.seconds(5))*/)/*.trigger(PurgingTrigger.of(MyContinuousProcessingTimeTrigger.of(Time.seconds(5))))*/.aggregate(new BasicCounter<MonitorOuterClass.Monitor>());
 				aggregatedStream.print();
 				aggregatedStream.addSink(currentProducer);
 	//			DataStream<PlannedTrainDataOuterClass.PlannedTrainData> plannedTrainDataStream = someEntryStream.map(new MapFunction<Event, PlannedTrainDataOuterClass.PlannedTrainData>(){
