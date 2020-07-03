@@ -107,6 +107,7 @@ public class Main implements Callable<Integer> {
 					new FlinkKafkaProducer011<>(newOutgoingTopic,
 							new GenericBinaryProtoSerializer<>(),
 							new KafkaConfig().withClientId(newOutgoingTopic+"Producer").withGroupID("Monitoring").getProperties());
+			producer.setWriteTimestampToKafka(true);
 			this.flinkKafkaProducer011s.put(entry.getKey(),producer);
 		}
 	}
