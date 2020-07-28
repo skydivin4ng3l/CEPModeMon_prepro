@@ -22,7 +22,7 @@ public class BasicCounter<T extends Message> implements AggregateFunction<T, Lon
 
     @Override
     public AggregateOuterClass.Aggregate getResult(Long accumulator) {
-        AggregateOuterClass.Aggregate newAggregate = AggregateOuterClass.Aggregate.newBuilder().setVolume(accumulator).build();
+        AggregateOuterClass.Aggregate newAggregate = AggregateOuterClass.Aggregate.newBuilder().setVolume(accumulator).setTime(System.currentTimeMillis()).build();
         return newAggregate;
     }
 
